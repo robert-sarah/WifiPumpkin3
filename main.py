@@ -12,16 +12,26 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QIcon, QFont
 
 # Import des modules personnalisés
-from ui.main_window import MainWindow
-from core.network_manager import NetworkManager
-from core.logger import Logger
-from utils.config import Config
+try:
+    from ui.main_window import MainWindow
+    from core.network_manager import NetworkManager
+    from core.logger import Logger
+    from utils.config import Config
+except ImportError as e:
+    print(f"Erreur d'import: {e}")
+    print("Vérifiez que tous les modules sont présents")
+    sys.exit(1)
 
-# Import des nouveaux modules avancés
-from core.attacks.wpa_cracker import WPACracker
-from core.attacks.dns_spoof import DNSSpoofer
-from core.stealth.anti_detection import AntiDetection
-from ui.dashboard import Dashboard
+# Import des nouveaux modules avancés avec gestion d'erreur
+try:
+    from core.attacks.wpa_cracker import WPACracker
+    from core.attacks.dns_spoof import DNSSpoofer
+    from core.stealth.anti_detection import AntiDetection
+    from ui.dashboard import Dashboard
+    ADVANCED_MODULES_AVAILABLE = True
+except ImportError as e:
+    print(f"Modules avancés non disponibles: {e}")
+    ADVANCED_MODULES_AVAILABLE = False
 
 class WiFiPumpkin3App:
     """Application principale WiFiPumpkin3"""
@@ -41,10 +51,25 @@ class WiFiPumpkin3App:
         self.network_manager = NetworkManager()
         
         # Initialisation des nouveaux modules avancés
-        self.wpa_cracker = WPACracker(self.logger)
-        self.dns_spoofer = DNSSpoofer(self.logger)
-        self.anti_detection = AntiDetection(self.logger)
-        self.dashboard = Dashboard(self.logger)
+        if ADVANCED_MODULES_AVAILABLE:
+            try:
+                self.wpa_cracker = WPACracker(self.logger)
+                self.dns_spoofer = DNSSpoofer(self.logger)
+                self.anti_detection = AntiDetection(self.logger)
+                self.dashboard = Dashboard(self.logger)
+                self.logger.log("INFO", "Modules avancés initialisés avec succès")
+            except Exception as e:
+                self.logger.log("ERROR", f"Erreur lors de l'initialisation des modules avancés: {str(e)}")
+                self.wpa_cracker = None
+                self.dns_spoofer = None
+                self.anti_detection = None
+                self.dashboard = None
+        else:
+            self.wpa_cracker = None
+            self.dns_spoofer = None
+            self.anti_detection = None
+            self.dashboard = None
+            self.logger.log("WARNING", "Modules avancés non disponibles")
         
         # Création de la fenêtre principale
         self.main_window = MainWindow(self.network_manager, self.logger, self.config)
