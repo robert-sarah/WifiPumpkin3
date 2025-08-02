@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+WiFiPumpkin3 - Clone avec PyQt5
+Interface graphique pour les attaques WiFi
+"""
+
+import sys
+import os
+from PyQt5.QtWidgets import QApplication, QMainWindow, QMessageBox
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QIcon, QFont
+
+# Import des modules personnalisés
+from ui.main_window import MainWindow
+from core.network_manager import NetworkManager
+from core.logger import Logger
+from utils.config import Config
+
+class WiFiPumpkin3App:
+    """Application principale WiFiPumpkin3"""
+    
+    def __init__(self):
+        self.app = QApplication(sys.argv)
+        self.app.setApplicationName("WiFiPumpkin3")
+        self.app.setApplicationVersion("3.0.0")
+        self.app.setOrganizationName("WiFiPumpkin3")
+        
+        # Configuration de l'application
+        self.setup_application()
+        
+        # Initialisation des composants
+        self.logger = Logger()
+        self.config = Config()
+        self.network_manager = NetworkManager()
+        
+        # Création de la fenêtre principale
+        self.main_window = MainWindow(self.network_manager, self.logger, self.config)
+        
+    def setup_application(self):
+        """Configuration de l'application"""
+        # Style de l'application
+        self.app.setStyle('Fusion')
+        
+        # Police par défaut
+        font = QFont("Segoe UI", 9)
+        self.app.setFont(font)
+        
+        # Icône de l'application
+        icon_path = os.path.join(os.path.dirname(__file__), "assets", "icon.png")
+        if os.path.exists(icon_path):
+            self.app.setWindowIcon(QIcon(icon_path))
+    
+    def run(self):
+        """Lance l'application"""
+        try:
+            # Vérification des privilèges administrateur
+            if not self.check_admin_privileges():
+                QMessageBox.critical(None, "Erreur", 
+                                   "WiFiPumpkin3 nécessite des privilèges administrateur pour fonctionner.")
+                return 1
+            
+            # Affichage de la fenêtre principale
+            self.main_window.show()
+            
+            # Lancement de l'application
+            return self.app.exec_()
+            
+        except Exception as e:
+            QMessageBox.critical(None, "Erreur Critique", 
+                               f"Erreur lors du lancement de l'application:\n{str(e)}")
+            return 1
+    
+    def check_admin_privileges(self):
+        """Vérifie si l'application a les privilèges administrateur"""
+        try:
+            # Sur Windows
+            import ctypes
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            # Sur Linux/Mac
+            return os.geteuid() == 0
+
+def main():
+    """Point d'entrée principal"""
+    app = WiFiPumpkin3App()
+    sys.exit(app.run())
+
+if __name__ == "__main__":
+    main() 
