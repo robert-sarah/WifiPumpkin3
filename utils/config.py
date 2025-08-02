@@ -20,6 +20,11 @@ class Config:
             config_file = os.path.join(config_dir, 'wifipumpkin3.conf')
             
         self.config_file = config_file
+        
+        # Définition du fichier de configuration avancée
+        config_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+        self.advanced_config_file = os.path.join(config_dir, 'advanced_modules.json')
+        
         self.config = configparser.ConfigParser()
         
         # Chargement de la configuration

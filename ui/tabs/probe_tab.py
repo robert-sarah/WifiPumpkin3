@@ -12,6 +12,14 @@ from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
+# Import scapy au niveau du module
+try:
+    from scapy.all import sendp
+    from scapy.layers.dot11 import Dot11, Dot11ProbeReq, Dot11Elt
+    SCAPY_AVAILABLE = True
+except ImportError:
+    SCAPY_AVAILABLE = False
+
 class ProbeTab(QWidget):
     """Onglet pour l'attaque Probe Request"""
     
@@ -149,8 +157,8 @@ class ProbeTab(QWidget):
         try:
             self.logs_text.append("🔍 Démarrage de l'attaque Probe...")
             
-                    # Exécution de l'attaque probe request réelle
-        self.execute_probe_attack()
+            # Exécution de l'attaque probe request réelle
+            self.execute_probe_attack()
             
             # Mise à jour de l'interface
             self.start_btn.setEnabled(False)
@@ -178,9 +186,10 @@ class ProbeTab(QWidget):
     def execute_probe_attack(self):
         """Exécute une vraie attaque probe request"""
         try:
-            from scapy.all import *
-            from scapy.layers.dot11 import Dot11, Dot11ProbeReq, Dot11Elt
-            
+            if not SCAPY_AVAILABLE:
+                self.logs_text.append("❌ Scapy n'est pas disponible")
+                return
+                
             interface = self.interface_combo.currentText()
             ssid = self.probe_ssid.text()
             count = self.probe_count.value()

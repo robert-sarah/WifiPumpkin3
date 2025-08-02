@@ -7,9 +7,15 @@ Gère les interfaces, les scans et les configurations
 
 import os
 import subprocess
-import netifaces
 import psutil
 from scapy.all import *
+
+# Import conditionnel de netifaces
+try:
+    import netifaces
+    NETIFACES_AVAILABLE = True
+except ImportError:
+    NETIFACES_AVAILABLE = False
 
 class NetworkManager:
     """Gestionnaire des interfaces réseau"""
@@ -22,29 +28,66 @@ class NetworkManager:
         """Récupère la liste des interfaces WiFi"""
         wifi_interfaces = []
         
+        # Détection Windows avec psutil (plus fiable)
         try:
-            # Utilisation de iwconfig pour détecter les interfaces WiFi
-            result = subprocess.run(['iwconfig'], capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.split('\n')
-                current_interface = None
-                
-                for line in lines:
-                    if line.strip() and not line.startswith(' '):
-                        # Nouvelle interface
-                        current_interface = line.split()[0]
-                        if 'IEEE 802.11' in line or 'ESSID' in line:
-                            wifi_interfaces.append(current_interface)
-                            
+            for interface in psutil.net_if_addrs():
+                # Sur Windows, les interfaces WiFi ont souvent des noms spécifiques
+                if any(keyword in interface.lower() for keyword in ['wi-fi', 'wireless', 'wlan', 'wifi']):
+                    wifi_interfaces.append(interface)
+                    
         except Exception as e:
             print(f"Erreur lors de la détection des interfaces WiFi: {str(e)}")
             
-        # Fallback: utilisation de netifaces
+        # Fallback: utilisation de netsh pour Windows
         if not wifi_interfaces:
+            try:
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                                     capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        if 'Name' in line and ':' in line:
+                            interface_name = line.split(':')[1].strip().strip('"')
+                            if interface_name and not interface_name.startswith('Microsoft'):
+                                wifi_interfaces.append(interface_name)
+                                
+            except Exception as e:
+                print(f"Erreur lors de la détection des interfaces WiFi: {str(e)}")
+                
+        # Fallback: utilisation de iwconfig pour Linux
+        if not wifi_interfaces:
+            try:
+                result = subprocess.run(['iwconfig'], capture_output=True, text=True)
+                
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    current_interface = None
+                    
+                    for line in lines:
+                        if line.strip() and not line.startswith(' '):
+                            # Nouvelle interface
+                            current_interface = line.split()[0]
+                            if 'IEEE 802.11' in line or 'ESSID' in line:
+                                wifi_interfaces.append(current_interface)
+                                
+            except Exception as e:
+                print(f"Erreur lors de la détection des interfaces WiFi: {str(e)}")
+                
+        # Fallback: utilisation de netifaces si disponible
+        if not wifi_interfaces and NETIFACES_AVAILABLE:
             try:
                 for interface in netifaces.interfaces():
                     if interface.startswith(('wlan', 'wifi', 'ath')):
+                        wifi_interfaces.append(interface)
+            except:
+                pass
+        
+        # Fallback: utilisation de psutil pour Windows
+        if not wifi_interfaces:
+            try:
+                for interface in psutil.net_if_addrs():
+                    if interface.startswith(('Wi-Fi', 'Wireless', 'wlan')):
                         wifi_interfaces.append(interface)
             except:
                 pass
