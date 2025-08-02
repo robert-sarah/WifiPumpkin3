@@ -14,6 +14,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
 from core.attacks.evil_twin import EvilTwinAttack
+from core.network_scanner import NetworkScanner
 
 class EvilTwinTab(QWidget):
     """Onglet pour l'attaque Evil Twin"""
@@ -24,6 +25,7 @@ class EvilTwinTab(QWidget):
         self.logger = logger
         self.evil_twin_attack = None
         self.attack_thread = None
+        self.network_scanner = NetworkScanner(logger)
         
         self.setup_ui()
         
@@ -184,20 +186,28 @@ class EvilTwinTab(QWidget):
     def scan_networks(self):
         """Scanne les réseaux WiFi disponibles"""
         try:
-            self.logs_text.append("🔍 Scan des réseaux en cours...")
-            networks = self.network_manager.scan_networks()
+            self.logs_text.append("🔍 Démarrage du scan des réseaux WiFi...")
             
-            # Mise à jour du tableau
-            self.networks_table.setRowCount(len(networks))
+            # Récupération de l'interface sélectionnée
+            interface = self.interface_combo.currentText()
+            if not interface:
+                self.logs_text.append("❌ Veuillez sélectionner une interface WiFi")
+                return
             
-            for i, network in enumerate(networks):
-                self.networks_table.setItem(i, 0, QTableWidgetItem(network.get('ssid', '')))
-                self.networks_table.setItem(i, 1, QTableWidgetItem(network.get('bssid', '')))
-                self.networks_table.setItem(i, 2, QTableWidgetItem(str(network.get('channel', ''))))
-                self.networks_table.setItem(i, 3, QTableWidgetItem(f"{network.get('signal', '')} dBm"))
-                self.networks_table.setItem(i, 4, QTableWidgetItem(network.get('encryption', '')))
+            # Lancement du scan réel
+            networks = self.network_scanner.scan_networks(interface, duration=15)
             
-            self.logs_text.append(f"✅ {len(networks)} réseaux trouvés")
+            if networks:
+                self.update_networks_list(networks)
+                self.logs_text.append(f"✅ Scan terminé - {len(networks)} réseaux trouvés")
+                
+                # Affichage des statistiques
+                stats = self.network_scanner.get_network_statistics()
+                self.logs_text.append(f"📊 Statistiques: {stats['total_networks']} réseaux, "
+                                   f"{stats['open_networks']} ouverts, "
+                                   f"{stats['wpa2_networks']} WPA2")
+            else:
+                self.logs_text.append("⚠️ Aucun réseau trouvé")
             
         except Exception as e:
             self.logs_text.append(f"❌ Erreur lors du scan: {str(e)}")

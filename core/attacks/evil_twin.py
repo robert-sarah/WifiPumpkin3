@@ -187,40 +187,24 @@ subnet 192.168.1.0 netmask 255.255.255.0 {{
             web_dir = '/tmp/captive_portal'
             os.makedirs(web_dir, exist_ok=True)
             
-            # Page de connexion HTML
-            login_page = """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Connexion WiFi</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
-        .container { max-width: 400px; margin: 50px auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; }
-        input { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; box-sizing: border-box; }
-        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background: #0056b3; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Connexion WiFi</h1>
-        <form method="post" action="/login">
-            <input type="text" name="username" placeholder="Nom d'utilisateur" required>
-            <input type="password" name="password" placeholder="Mot de passe" required>
-            <button type="submit">Se connecter</button>
-        </form>
-    </div>
-</body>
-</html>
-"""
+            # Import du gestionnaire de templates
+            from utils.template_manager import TemplateManager
+            template_manager = TemplateManager()
             
-            with open(f'{web_dir}/index.html', 'w') as f:
-                f.write(login_page)
+            # Sélection du template (par défaut wifi_login)
+            template_id = self.config.get('template_id', 'wifi_login')
+            template_content = template_manager.get_template(template_id)
+            
+            # Sauvegarde du template
+            with open(f'{web_dir}/index.html', 'w', encoding='utf-8') as f:
+                f.write(template_content)
                 
-            # Démarrage du serveur web simple
-            subprocess.Popen(['python3', '-m', 'http.server', '80', '--directory', web_dir],
+            # Démarrage du serveur web
+            port = self.config.get('server_port', 80)
+            subprocess.Popen(['python3', '-m', 'http.server', str(port), '--directory', web_dir],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            self.logger.log("INFO", f"Portail captif démarré avec template {template_id} sur le port {port}")
                            
         except Exception as e:
             self.logger.log("ERROR", f"Erreur lors de la configuration du serveur web: {str(e)}")

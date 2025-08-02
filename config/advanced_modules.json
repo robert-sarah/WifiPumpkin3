@@ -1,0 +1,75 @@
+{
+  "wpa_cracking": {
+    "enabled": true,
+    "default_wordlist": "/usr/share/wordlists/rockyou.txt",
+    "gpu_enabled": true,
+    "max_threads": 4,
+    "handshake_timeout": 30,
+    "methods": ["dictionary", "brute_force", "gpu"]
+  },
+  "dns_spoofing": {
+    "enabled": true,
+    "use_dnsmasq": true,
+    "use_scapy": false,
+    "default_gateway": "192.168.1.1",
+    "dhcp_range": "192.168.1.100,192.168.1.200",
+    "dns_servers": ["8.8.8.8", "8.8.4.4"]
+  },
+  "stealth": {
+    "enabled": true,
+    "mac_rotation": true,
+    "rotation_interval": 300,
+    "noise_traffic": true,
+    "process_hiding": true,
+    "log_encryption": true,
+    "legitimate_prefixes": [
+      "00:50:56",
+      "00:0C:29",
+      "00:1A:11",
+      "00:16:3E",
+      "00:15:5D"
+    ]
+  },
+  "ssl": {
+    "enabled": true,
+    "auto_generate": true,
+    "cert_duration": 365,
+    "key_size": 4096,
+    "default_port": 443,
+    "redirect_http": true
+  },
+  "dashboard": {
+    "enabled": true,
+    "refresh_interval": 1000,
+    "max_log_entries": 1000,
+    "auto_export": false,
+    "export_format": "json"
+  },
+  "system_requirements": {
+    "required_tools": [
+      "aircrack-ng",
+      "hashcat",
+      "dnsmasq",
+      "openssl",
+      "iptables"
+    ],
+    "optional_tools": [
+      "reaver",
+      "bully",
+      "cap2hccapx"
+    ]
+  },
+  "logging": {
+    "level": "INFO",
+    "file_output": true,
+    "console_output": true,
+    "max_file_size": "10MB",
+    "backup_count": 5
+  },
+  "security": {
+    "encrypt_logs": true,
+    "secure_deletion": true,
+    "audit_trail": true,
+    "session_timeout": 3600
+  }
+} 

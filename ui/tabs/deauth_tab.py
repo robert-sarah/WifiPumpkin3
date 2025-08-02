@@ -72,6 +72,12 @@ class DeauthTab(QWidget):
         self.channel_spin.setValue(6)
         target_layout.addWidget(self.channel_spin, 3, 1)
         
+        # Adresse MAC du client (optionnel)
+        target_layout.addWidget(QLabel("Client MAC (optionnel):"), 4, 0)
+        self.client_mac = QLineEdit()
+        self.client_mac.setPlaceholderText("aa:bb:cc:dd:ee:ff")
+        target_layout.addWidget(self.client_mac, 4, 1)
+        
         layout.addWidget(target_group)
         
     def setup_attack_config_section(self, layout):
@@ -93,19 +99,10 @@ class DeauthTab(QWidget):
         self.interval_spin.setValue(100)
         config_layout.addWidget(self.interval_spin, 1, 1)
         
-        # Type d'attaque
-        config_layout.addWidget(QLabel("Type d'attaque:"), 2, 0)
-        self.attack_type = QComboBox()
-        self.attack_type.addItems(["Deauth", "Disassoc", "Auth"])
-        config_layout.addWidget(self.attack_type, 2, 1)
-        
         # Options avancées
         self.broadcast_checkbox = QCheckBox("Attaque broadcast")
         self.broadcast_checkbox.setChecked(True)
-        config_layout.addWidget(self.broadcast_checkbox, 3, 0, 1, 2)
-        
-        self.continuous_checkbox = QCheckBox("Attaque continue")
-        config_layout.addWidget(self.continuous_checkbox, 4, 0, 1, 2)
+        config_layout.addWidget(self.broadcast_checkbox, 2, 0, 1, 2)
         
         layout.addWidget(config_group)
         
@@ -186,20 +183,15 @@ class DeauthTab(QWidget):
                 'target_ssid': self.target_ssid.text(),
                 'channel': self.channel_spin.value(),
                 'packet_count': self.packet_count.value(),
-                'interval': self.interval_spin.value(),
-                'attack_type': self.attack_type.currentText(),
-                'broadcast': self.broadcast_checkbox.isChecked(),
-                'continuous': self.continuous_checkbox.isChecked()
+                'interval': self.interval_spin.value() / 1000.0,  # Conversion en secondes
+                'client_mac': self.client_mac.text() if self.client_mac.text() else None
             }
             
             # Création de l'attaque
             self.deauth_attack = DeauthAttack(self.network_manager, self.logger)
             
-            # Démarrage dans un thread séparé
-            self.attack_thread = DeauthAttackThread(self.deauth_attack, config)
-            self.attack_thread.log_signal.connect(self.logs_text.append)
-            self.attack_thread.finished.connect(self.on_attack_finished)
-            self.attack_thread.start()
+            # Démarrage de l'attaque
+            self.deauth_attack.start(config)
             
             # Mise à jour de l'interface
             self.start_btn.setEnabled(False)
@@ -218,10 +210,6 @@ class DeauthTab(QWidget):
         try:
             if self.deauth_attack:
                 self.deauth_attack.stop()
-                
-            if self.attack_thread:
-                self.attack_thread.quit()
-                self.attack_thread.wait()
                 
             # Mise à jour de l'interface
             self.start_btn.setEnabled(True)

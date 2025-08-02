@@ -76,12 +76,13 @@ class NetworkManager:
             if result.returncode == 0:
                 networks = self.parse_scan_output(result.stdout)
             else:
-                # Fallback: simulation de réseaux pour la démo
-                networks = self.get_demo_networks()
+                # Fallback avec airodump-ng
+                networks = self.scan_with_airodump(self.primary_interface)
                 
         except Exception as e:
             print(f"Erreur lors du scan: {str(e)}")
-            networks = self.get_demo_networks()
+            # Dernier recours avec Scapy
+            networks = self.scan_with_scapy(self.primary_interface)
             
         return networks
         
@@ -131,45 +132,124 @@ class NetworkManager:
             
         return networks
         
-    def get_demo_networks(self):
-        """Retourne des réseaux de démonstration"""
-        return [
-            {
-                'ssid': 'FreeWifi',
-                'bssid': '00:11:22:33:44:55',
-                'channel': 6,
-                'signal': '-45',
-                'encryption': 'WPA2'
-            },
-            {
-                'ssid': 'Orange_WiFi',
-                'bssid': 'aa:bb:cc:dd:ee:ff',
-                'channel': 11,
-                'signal': '-52',
-                'encryption': 'WPA2'
-            },
-            {
-                'ssid': 'SFR_WiFi_Fon',
-                'bssid': '11:22:33:44:55:66',
-                'channel': 1,
-                'signal': '-67',
-                'encryption': 'Open'
-            },
-            {
-                'ssid': 'Bouygues_WiFi',
-                'bssid': 'aa:aa:aa:aa:aa:aa',
-                'channel': 9,
-                'signal': '-73',
-                'encryption': 'WPA2'
-            },
-            {
-                'ssid': 'Neighbor_WiFi',
-                'bssid': 'bb:bb:bb:bb:bb:bb',
-                'channel': 3,
-                'signal': '-81',
-                'encryption': 'WEP'
-            }
-        ]
+    def scan_with_airodump(self, interface):
+        """Scan avec airodump-ng"""
+        networks = []
+        try:
+            # Création du répertoire de sortie
+            output_dir = '/tmp/wifi_scan'
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Lancement d'airodump-ng
+            cmd = [
+                'airodump-ng',
+                '--output-format', 'csv',
+                '--write', f'{output_dir}/scan',
+                '--write-interval', '1',
+                interface
+            ]
+            
+            # Démarrage du processus
+            process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            
+            # Attente de 10 secondes
+            import time
+            time.sleep(10)
+            
+            # Arrêt du processus
+            process.terminate()
+            process.wait()
+            
+            # Lecture des résultats
+            csv_file = f'{output_dir}/scan-01.csv'
+            if os.path.exists(csv_file):
+                with open(csv_file, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                
+                # Parsing des lignes
+                for line in lines:
+                    if line.strip() and ',' in line:
+                        parts = line.split(',')
+                        if len(parts) >= 15:
+                            try:
+                                network = {
+                                    'ssid': parts[13].strip(),
+                                    'bssid': parts[0].strip(),
+                                    'channel': int(parts[3].strip()) if parts[3].strip().isdigit() else 0,
+                                    'signal': parts[8].strip(),
+                                    'encryption': parts[6].strip()
+                                }
+                                
+                                # Filtrage des réseaux valides
+                                if network['bssid'] and network['bssid'] != 'BSSID':
+                                    networks.append(network)
+                                    
+                            except (ValueError, IndexError):
+                                continue
+                                
+        except Exception as e:
+            print(f"Erreur scan airodump: {str(e)}")
+            
+        return networks
+    
+    def scan_with_scapy(self, interface):
+        """Scan avec Scapy en dernier recours"""
+        networks = []
+        try:
+            # Mise en mode monitor
+            self.set_monitor_mode(interface)
+            
+            # Fonction de callback pour capturer les beacons
+            def beacon_handler(pkt):
+                if pkt.haslayer(Dot11Beacon):
+                    try:
+                        # Extraction des informations du beacon
+                        bssid = pkt[Dot11].addr2
+                        ssid = None
+                        channel = None
+                        encryption = "Unknown"
+                        
+                        # Recherche du SSID
+                        if pkt.haslayer(Dot11Elt):
+                            for layer in pkt[Dot11Elt]:
+                                if layer.ID == 0:  # SSID
+                                    ssid = layer.info.decode('utf-8', errors='ignore')
+                                elif layer.ID == 3:  # Channel
+                                    channel = ord(layer.info)
+                        
+                        # Recherche du type d'encryption
+                        if pkt.haslayer(Dot11Elt):
+                            for layer in pkt[Dot11Elt]:
+                                if layer.ID == 48:  # RSN
+                                    encryption = "WPA2"
+                                elif layer.ID == 221:  # Vendor specific
+                                    if b'WPA' in layer.info:
+                                        encryption = "WPA"
+                        
+                        # Création de l'entrée réseau
+                        if ssid and bssid:
+                            network = {
+                                'ssid': ssid,
+                                'bssid': bssid,
+                                'channel': channel or 0,
+                                'signal': 'N/A',
+                                'encryption': encryption
+                            }
+                            
+                            # Ajout si pas déjà présent
+                            if not any(n['bssid'] == bssid for n in networks):
+                                networks.append(network)
+                                
+                    except Exception as e:
+                        pass
+            
+            # Capture des paquets pendant 10 secondes
+            sniff(iface=interface, prn=beacon_handler, timeout=10, store=0)
+            
+        except Exception as e:
+            print(f"Erreur scan Scapy: {str(e)}")
+            
+        return networks
         
     def set_monitor_mode(self, interface):
         """Met l'interface en mode monitor"""

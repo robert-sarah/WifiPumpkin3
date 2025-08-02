@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion WiFi - Authentification Requise</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 25px 50px rgba(0,0,0,0.15);
+            width: 100%;
+            max-width: 450px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #667eea);
+            background-size: 200% 100%;
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        
+        .wifi-icon {
+            width: 80px;
+            height: 80px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            border-radius: 50%;
+            margin: 0 auto 25px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 32px;
+            position: relative;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        .wifi-icon::before {
+            content: '📶';
+            font-size: 40px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 16px;
+            line-height: 1.5;
+        }
+        
+        .network-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .network-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #2c3e50;
+            margin-bottom: 5px;
+        }
+        
+        .network-status {
+            color: #27ae60;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #2c3e50;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        
+        input[type="text"], input[type="password"], input[type="email"] {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        
+        input[type="text"]:focus, input[type="password"]:focus, input[type="email"]:focus {
+            outline: none;
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .password-field {
+            position: relative;
+        }
+        
+        .toggle-password {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            color: #7f8c8d;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        
+        .btn {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+            padding: 16px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn:hover::before {
+            left: 100%;
+        }
+        
+        .security-info {
+            margin-top: 25px;
+            padding: 15px;
+            background: #e8f5e8;
+            border-radius: 10px;
+            border-left: 4px solid #27ae60;
+        }
+        
+        .security-title {
+            color: #27ae60;
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .security-text {
+            color: #2c3e50;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .loading {
+            display: none;
+            margin-top: 15px;
+        }
+        
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error-message {
+            color: #e74c3c;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        .success-message {
+            color: #27ae60;
+            font-size: 14px;
+            margin-top: 10px;
+            display: none;
+        }
+        
+        @media (max-width: 480px) {
+            .container {
+                padding: 30px 20px;
+                margin: 10px;
+            }
+            
+            h1 {
+                font-size: 24px;
+            }
+            
+            .wifi-icon {
+                width: 60px;
+                height: 60px;
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="wifi-icon"></div>
+        <h1>Connexion WiFi</h1>
+        <p class="subtitle">Authentification requise pour accéder au réseau</p>
+        
+        <div class="network-info">
+            <div class="network-name">WiFi_Secure_Network</div>
+            <div class="network-status">🔒 Réseau sécurisé WPA2</div>
+        </div>
+        
+        <form id="wifi-form" action="/login" method="POST">
+            <div class="form-group">
+                <label for="username">Nom d'utilisateur ou Email</label>
+                <input type="text" id="username" name="username" required 
+                       placeholder="Entrez votre nom d'utilisateur" autocomplete="username">
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Mot de passe</label>
+                <div class="password-field">
+                    <input type="password" id="password" name="password" required 
+                           placeholder="Entrez votre mot de passe" autocomplete="current-password">
+                    <button type="button" class="toggle-password" onclick="togglePassword()">👁️</button>
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="email">Email (optionnel)</label>
+                <input type="email" id="email" name="email" 
+                       placeholder="votre@email.com" autocomplete="email">
+            </div>
+            
+            <button type="submit" class="btn" id="submit-btn">
+                <span id="btn-text">Se Connecter</span>
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <div style="margin-top: 5px; font-size: 12px;">Connexion en cours...</div>
+                </div>
+            </button>
+        </form>
+        
+        <div class="error-message" id="error-msg">
+            ❌ Identifiants incorrects. Veuillez réessayer.
+        </div>
+        
+        <div class="success-message" id="success-msg">
+            ✅ Connexion réussie ! Redirection en cours...
+        </div>
+        
+        <div class="security-info">
+            <div class="security-title">🔒 Connexion sécurisée</div>
+            <div class="security-text">
+                Vos informations sont protégées par un chiffrement SSL/TLS. 
+                Cette connexion est sécurisée et vos données sont confidentielles.
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Animation d'entrée
+        document.addEventListener('DOMContentLoaded', function() {
+            const container = document.querySelector('.container');
+            container.style.opacity = '0';
+            container.style.transform = 'translateY(30px)';
+            
+            setTimeout(() => {
+                container.style.transition = 'all 0.6s ease';
+                container.style.opacity = '1';
+                container.style.transform = 'translateY(0)';
+            }, 100);
+        });
+        
+        // Toggle password visibility
+        function togglePassword() {
+            const passwordInput = document.getElementById('password');
+            const toggleBtn = document.querySelector('.toggle-password');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleBtn.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggleBtn.textContent = '👁️';
+            }
+        }
+        
+        // Validation en temps réel
+        document.getElementById('username').addEventListener('input', function() {
+            validateField(this, this.value.length > 0);
+        });
+        
+        document.getElementById('password').addEventListener('input', function() {
+            validateField(this, this.value.length >= 6);
+        });
+        
+        document.getElementById('email').addEventListener('input', function() {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            validateField(this, this.value === '' || emailRegex.test(this.value));
+        });
+        
+        function validateField(field, isValid) {
+            if (isValid) {
+                field.style.borderColor = '#27ae60';
+                field.style.backgroundColor = '#f8fff8';
+            } else {
+                field.style.borderColor = '#e74c3c';
+                field.style.backgroundColor = '#fff8f8';
+            }
+        }
+        
+        // Gestion du formulaire
+        document.getElementById('wifi-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            if (!username || !password) {
+                showError('Veuillez remplir tous les champs requis.');
+                return;
+            }
+            
+            // Simulation de connexion
+            showLoading();
+            
+            setTimeout(() => {
+                hideLoading();
+                showSuccess();
+                
+                // Soumission du formulaire après délai
+                setTimeout(() => {
+                    this.submit();
+                }, 2000);
+                
+            }, 1500);
+        });
+        
+        function showLoading() {
+            document.getElementById('btn-text').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('submit-btn').disabled = true;
+        }
+        
+        function hideLoading() {
+            document.getElementById('btn-text').style.display = 'block';
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('submit-btn').disabled = false;
+        }
+        
+        function showError(message) {
+            const errorMsg = document.getElementById('error-msg');
+            errorMsg.textContent = '❌ ' + message;
+            errorMsg.style.display = 'block';
+            document.getElementById('success-msg').style.display = 'none';
+            
+            setTimeout(() => {
+                errorMsg.style.display = 'none';
+            }, 5000);
+        }
+        
+        function showSuccess() {
+            const successMsg = document.getElementById('success-msg');
+            successMsg.style.display = 'block';
+            document.getElementById('error-msg').style.display = 'none';
+        }
+        
+        // Auto-focus sur le premier champ
+        setTimeout(() => {
+            document.getElementById('username').focus();
+        }, 500);
+        
+        // Détection de la frappe pour validation
+        document.addEventListener('keyup', function(e) {
+            if (e.key === 'Enter') {
+                document.getElementById('wifi-form').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html> 

@@ -37,4 +37,6 @@ netfilter-queue==1.0.0
 python-iptables==1.0.1
 pyroute2==0.7.12
 pypcap==1.2.3
-python-libpcap==1.0.0 
+python-libpcap==1.0.0
+dnsmasq==2.85.0
+cap2hccapx==1.0.0 

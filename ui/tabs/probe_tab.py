@@ -149,8 +149,8 @@ class ProbeTab(QWidget):
         try:
             self.logs_text.append("🔍 Démarrage de l'attaque Probe...")
             
-            # Simulation de l'attaque pour la démo
-            self.simulate_probe_attack()
+                    # Exécution de l'attaque probe request réelle
+        self.execute_probe_attack()
             
             # Mise à jour de l'interface
             self.start_btn.setEnabled(False)
@@ -175,22 +175,45 @@ class ProbeTab(QWidget):
         except Exception as e:
             self.logs_text.append(f"❌ Erreur lors de l'arrêt: {str(e)}")
             
-    def simulate_probe_attack(self):
-        """Simule une attaque Probe pour la démo"""
-        # Données de démonstration
-        demo_results = [
-            {"ssid": "FreeWifi", "bssid": "00:11:22:33:44:55", "channel": 6, "signal": "-45"},
-            {"ssid": "Orange_WiFi", "bssid": "aa:bb:cc:dd:ee:ff", "channel": 11, "signal": "-52"},
-            {"ssid": "SFR_WiFi_Fon", "bssid": "11:22:33:44:55:66", "channel": 1, "signal": "-67"}
-        ]
-        
-        # Mise à jour du tableau
-        self.results_table.setRowCount(len(demo_results))
-        
-        for i, result in enumerate(demo_results):
-            self.results_table.setItem(i, 0, QTableWidgetItem(result['ssid']))
-            self.results_table.setItem(i, 1, QTableWidgetItem(result['bssid']))
-            self.results_table.setItem(i, 2, QTableWidgetItem(str(result['channel'])))
-            self.results_table.setItem(i, 3, QTableWidgetItem(f"{result['signal']} dBm"))
+    def execute_probe_attack(self):
+        """Exécute une vraie attaque probe request"""
+        try:
+            from scapy.all import *
+            from scapy.layers.dot11 import Dot11, Dot11ProbeReq, Dot11Elt
             
-        self.logs_text.append(f"✅ {len(demo_results)} réseaux trouvés") 
+            interface = self.interface_combo.currentText()
+            ssid = self.probe_ssid.text()
+            count = self.probe_count.value()
+            interval = self.interval_spin.value() / 1000.0  # Conversion en secondes
+            
+            if not ssid:
+                self.logs_text.append("❌ Veuillez spécifier un SSID à sonder")
+                return
+            
+            # Mise en mode monitor
+            self.network_manager.set_monitor_mode(interface)
+            
+            # Création du paquet probe request
+            probe_packet = (
+                Dot11(type=0, subtype=4, addr1="ff:ff:ff:ff:ff:ff", 
+                      addr2="00:11:22:33:44:55", addr3="ff:ff:ff:ff:ff:ff") /
+                Dot11ProbeReq() /
+                Dot11Elt(ID="SSID", info=ssid.encode()) /
+                Dot11Elt(ID="Rates", info=b'\x82\x84\x8b\x96\x0c\x12\x18\x24')
+            )
+            
+            self.logs_text.append(f"🔍 Envoi de {count} probes pour '{ssid}'...")
+            
+            # Envoi des probes
+            for i in range(count):
+                sendp(probe_packet, iface=interface, verbose=False)
+                time.sleep(interval)
+                
+                # Mise à jour du log
+                if (i + 1) % 5 == 0:
+                    self.logs_text.append(f"📡 Probe {i + 1}/{count} envoyé")
+            
+            self.logs_text.append("✅ Attaque probe request terminée")
+            
+        except Exception as e:
+            self.logs_text.append(f"❌ Erreur lors de l'attaque probe: {str(e)}") 

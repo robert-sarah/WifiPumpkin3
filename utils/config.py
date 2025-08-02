@@ -6,6 +6,7 @@ Module de configuration pour WiFiPumpkin3
 
 import os
 import json
+from pathlib import Path
 import configparser
 from datetime import datetime
 
@@ -23,6 +24,7 @@ class Config:
         
         # Chargement de la configuration
         self.load_config()
+        self.load_advanced_config()
         
     def load_config(self):
         """Charge la configuration depuis le fichier"""
@@ -36,6 +38,25 @@ class Config:
         except Exception as e:
             print(f"Erreur lors du chargement de la configuration: {str(e)}")
             self.create_default_config()
+    
+    def load_advanced_config(self):
+        """Charge la configuration des modules avancés"""
+        try:
+            if os.path.exists(self.advanced_config_file):
+                with open(self.advanced_config_file, 'r', encoding='utf-8') as f:
+                    self.advanced_config = json.load(f)
+            else:
+                # Configuration par défaut pour les modules avancés
+                self.advanced_config = {
+                    "wpa_cracking": {"enabled": True},
+                    "dns_spoofing": {"enabled": True},
+                    "stealth": {"enabled": True},
+                    "ssl": {"enabled": True},
+                    "dashboard": {"enabled": True}
+                }
+        except Exception as e:
+            print(f"Erreur lors du chargement de la configuration avancée: {str(e)}")
+            self.advanced_config = {}
             
     def create_default_config(self):
         """Crée une configuration par défaut"""
@@ -111,6 +132,12 @@ class Config:
             return self.config.get(section, option)
         except:
             return fallback
+    
+    def get_advanced_config(self, module_name=None):
+        """Récupère la configuration des modules avancés"""
+        if module_name:
+            return self.advanced_config.get(module_name, {})
+        return self.advanced_config
             
     def getboolean(self, section, option, fallback=False):
         """Récupère une valeur booléenne de configuration"""

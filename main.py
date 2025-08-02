@@ -17,6 +17,12 @@ from core.network_manager import NetworkManager
 from core.logger import Logger
 from utils.config import Config
 
+# Import des nouveaux modules avancés
+from core.attacks.wpa_cracker import WPACracker
+from core.attacks.dns_spoof import DNSSpoofer
+from core.stealth.anti_detection import AntiDetection
+from ui.dashboard import Dashboard
+
 class WiFiPumpkin3App:
     """Application principale WiFiPumpkin3"""
     
@@ -33,6 +39,12 @@ class WiFiPumpkin3App:
         self.logger = Logger()
         self.config = Config()
         self.network_manager = NetworkManager()
+        
+        # Initialisation des nouveaux modules avancés
+        self.wpa_cracker = WPACracker(self.logger)
+        self.dns_spoofer = DNSSpoofer(self.logger)
+        self.anti_detection = AntiDetection(self.logger)
+        self.dashboard = Dashboard(self.logger)
         
         # Création de la fenêtre principale
         self.main_window = MainWindow(self.network_manager, self.logger, self.config)
@@ -60,6 +72,12 @@ class WiFiPumpkin3App:
                                    "WiFiPumpkin3 nécessite des privilèges administrateur pour fonctionner.")
                 return 1
             
+            # Initialisation des modules avancés
+            self.logger.log("INFO", "Initialisation des modules avancés...")
+            
+            # Vérification des outils système requis
+            self.check_system_requirements()
+            
             # Affichage de la fenêtre principale
             self.main_window.show()
             
@@ -70,6 +88,34 @@ class WiFiPumpkin3App:
             QMessageBox.critical(None, "Erreur Critique", 
                                f"Erreur lors du lancement de l'application:\n{str(e)}")
             return 1
+    
+    def check_system_requirements(self):
+        """Vérifie les outils système requis"""
+        try:
+            import subprocess
+            
+            # Outils requis pour les nouvelles fonctionnalités
+            required_tools = [
+                'aircrack-ng',
+                'hashcat',
+                'dnsmasq',
+                'openssl',
+                'iptables'
+            ]
+            
+            missing_tools = []
+            for tool in required_tools:
+                try:
+                    subprocess.run([tool, '--version'], capture_output=True, timeout=5)
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    missing_tools.append(tool)
+            
+            if missing_tools:
+                self.logger.log("WARNING", f"Outils manquants: {', '.join(missing_tools)}")
+                self.logger.log("INFO", "Certaines fonctionnalités avancées peuvent ne pas être disponibles")
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur lors de la vérification des outils: {str(e)}")
     
     def check_admin_privileges(self):
         """Vérifie si l'application a les privilèges administrateur"""

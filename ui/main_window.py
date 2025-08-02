@@ -20,6 +20,8 @@ from ui.tabs.evil_twin_tab import EvilTwinTab
 from ui.tabs.deauth_tab import DeauthTab
 from ui.tabs.probe_tab import ProbeTab
 from ui.tabs.captive_portal_tab import CaptivePortalTab
+from ui.tabs.wpa_cracking_tab import WPACrackingTab
+from ui.dashboard import Dashboard
 from ui.tabs.settings_tab import SettingsTab
 from ui.tabs.logs_tab import LogsTab
 
@@ -31,6 +33,9 @@ class MainWindow(QMainWindow):
         self.network_manager = network_manager
         self.logger = logger
         self.config = config
+        
+        # Initialisation des modules avancés
+        self.setup_advanced_modules()
         
         self.setup_ui()
         self.setup_menu()
@@ -118,22 +123,44 @@ class MainWindow(QMainWindow):
         self.tab_widget = QTabWidget()
         
         # Création des onglets
+        self.dashboard_tab = Dashboard(self.logger)
         self.evil_twin_tab = EvilTwinTab(self.network_manager, self.logger)
         self.deauth_tab = DeauthTab(self.network_manager, self.logger)
         self.probe_tab = ProbeTab(self.network_manager, self.logger)
         self.captive_portal_tab = CaptivePortalTab(self.network_manager, self.logger)
+        self.wpa_cracking_tab = WPACrackingTab(self.network_manager, self.logger)
         self.settings_tab = SettingsTab(self.config)
         self.logs_tab = LogsTab(self.logger)
         
         # Ajout des onglets
+        self.tab_widget.addTab(self.dashboard_tab, "📊 Dashboard")
         self.tab_widget.addTab(self.evil_twin_tab, "Evil Twin")
         self.tab_widget.addTab(self.deauth_tab, "Deauth Attack")
         self.tab_widget.addTab(self.probe_tab, "Probe Request")
         self.tab_widget.addTab(self.captive_portal_tab, "Captive Portal")
+        self.tab_widget.addTab(self.wpa_cracking_tab, "🔓 WPA Cracking")
         self.tab_widget.addTab(self.settings_tab, "Paramètres")
         self.tab_widget.addTab(self.logs_tab, "Logs")
         
         layout.addWidget(self.tab_widget)
+        
+    def setup_advanced_modules(self):
+        """Initialise les modules avancés"""
+        try:
+            # Import des modules avancés
+            from core.attacks.wpa_cracker import WPACracker
+            from core.attacks.dns_spoof import DNSSpoofer
+            from core.stealth.anti_detection import AntiDetection
+            
+            # Initialisation des modules
+            self.wpa_cracker = WPACracker(self.logger)
+            self.dns_spoofer = DNSSpoofer(self.logger)
+            self.anti_detection = AntiDetection(self.logger)
+            
+            self.logger.log("INFO", "Modules avancés initialisés avec succès")
+            
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur lors de l'initialisation des modules avancés: {str(e)}")
         
     def setup_menu(self):
         """Configuration du menu"""
@@ -153,6 +180,29 @@ class MainWindow(QMainWindow):
         scan_action = QAction('Scanner les réseaux', self)
         scan_action.triggered.connect(self.scan_networks)
         tools_menu.addAction(scan_action)
+        
+        # Menu des modules avancés
+        advanced_menu = menubar.addMenu('Modules Avancés')
+        
+        # WPA Cracking
+        wpa_action = QAction('WPA Cracking', self)
+        wpa_action.triggered.connect(self.open_wpa_cracking)
+        advanced_menu.addAction(wpa_action)
+        
+        # DNS Spoofing
+        dns_action = QAction('DNS Spoofing', self)
+        dns_action.triggered.connect(self.open_dns_spoofing)
+        advanced_menu.addAction(dns_action)
+        
+        # Anti-Détection
+        stealth_action = QAction('Mode Furtif', self)
+        stealth_action.triggered.connect(self.toggle_stealth_mode)
+        advanced_menu.addAction(stealth_action)
+        
+        # Dashboard
+        dashboard_action = QAction('Dashboard', self)
+        dashboard_action.triggered.connect(self.open_dashboard)
+        advanced_menu.addAction(dashboard_action)
         
         # Menu Aide
         help_menu = menubar.addMenu('Aide')
@@ -211,11 +261,67 @@ class MainWindow(QMainWindow):
             self.status_label.setText(f"{len(networks)} réseaux trouvés")
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du scan:\n{str(e)}")
+    
+    def open_wpa_cracking(self):
+        """Ouvre l'onglet WPA Cracking"""
+        try:
+            # Changement vers l'onglet WPA Cracking
+            for i in range(self.tab_widget.count()):
+                if "WPA Cracking" in self.tab_widget.tabText(i):
+                    self.tab_widget.setCurrentIndex(i)
+                    break
+            self.logger.log("INFO", "Onglet WPA Cracking ouvert")
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur ouverture WPA Cracking: {str(e)}")
+    
+    def open_dns_spoofing(self):
+        """Ouvre l'onglet DNS Spoofing"""
+        try:
+            # Changement vers l'onglet DNS Spoofing (si disponible)
+            self.logger.log("INFO", "Fonctionnalité DNS Spoofing accessible via l'interface")
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur ouverture DNS Spoofing: {str(e)}")
+    
+    def toggle_stealth_mode(self):
+        """Active/désactive le mode furtif"""
+        try:
+            if hasattr(self, 'anti_detection'):
+                # Interface pour activer le mode furtif
+                interface = self.network_manager.get_primary_interface()
+                if interface:
+                    self.anti_detection.setup_stealth_mode(interface)
+                    self.logger.log("INFO", "Mode furtif activé")
+                    QMessageBox.information(self, "Mode Furtif", "Mode furtif activé avec succès")
+                else:
+                    QMessageBox.warning(self, "Attention", "Aucune interface WiFi détectée")
+            else:
+                QMessageBox.warning(self, "Attention", "Module anti-détection non disponible")
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur mode furtif: {str(e)}")
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'activation du mode furtif:\n{str(e)}")
+    
+    def open_dashboard(self):
+        """Ouvre l'onglet Dashboard"""
+        try:
+            # Changement vers l'onglet Dashboard
+            for i in range(self.tab_widget.count()):
+                if "Dashboard" in self.tab_widget.tabText(i):
+                    self.tab_widget.setCurrentIndex(i)
+                    break
+            self.logger.log("INFO", "Dashboard ouvert")
+        except Exception as e:
+            self.logger.log("ERROR", f"Erreur ouverture Dashboard: {str(e)}")
             
     def show_about(self):
         """Affiche la boîte de dialogue À propos"""
         QMessageBox.about(self, "À propos de WiFiPumpkin3",
                          "WiFiPumpkin3 v3.0.0\n\n"
-                         "Outil de test de sécurité WiFi\n"
+                         "Outil de test de sécurité WiFi avancé\n"
                          "Développé avec PyQt5\n\n"
+                         "🚀 Nouvelles fonctionnalités:\n"
+                         "• WPA/WPA2 Cracking\n"
+                         "• DNS Spoofing\n"
+                         "• Mode Furtif\n"
+                         "• Dashboard Temps Réel\n"
+                         "• SSL/TLS Support\n\n"
                          "⚠️ Utilisez uniquement sur vos propres réseaux !") 
